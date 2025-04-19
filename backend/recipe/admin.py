@@ -1,11 +1,8 @@
 # admin.py
 from django.contrib import admin
 from .models import Recipe, Client, Ingredient, RecipeIngredient, Favorite
-from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
 from .forms import (
-    CustomUserCreationForm,
-    CustomUserChangeForm,
     EmailAuthenticationForm
 )
 

@@ -1,4 +1,3 @@
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from django.shortcuts import get_object_or_404
@@ -19,14 +18,10 @@ from .serializers import (
     SubscribeListSerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import models
 from rest_framework import generics, status, viewsets, filters
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .permissions import Owner, RecipePermission
 from rest_framework.decorators import action
-from django.http import HttpResponse
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from io import BytesIO
 import os
 from django.http import FileResponse

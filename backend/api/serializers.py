@@ -10,8 +10,6 @@ from recipe.models import (
     Subscribe,
     Favorite
 )
-from django.contrib.auth import authenticate
-from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
