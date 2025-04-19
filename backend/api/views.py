@@ -22,7 +22,6 @@ from rest_framework import generics, status, viewsets, filters
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .permissions import Owner, RecipePermission
 from rest_framework.decorators import action
-from io import BytesIO
 import os
 from django.http import FileResponse
 from .pagination import CustomPageNumberPagination
