@@ -5,10 +5,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets, filters
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import action
-from django_filters import rest_framework as rf_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import FileResponse
-from django.conf import settings
 from dotenv import load_dotenv
 
 from .pagination import CustomPageNumberPagination
@@ -23,13 +21,16 @@ from recipes.models import (
     RecipeIngredient
 )
 from .serializers import (
-    ClientSerializer,
     ClientAvatarSerializer,
     IngredientSerializer,
-    RecipeSerializer,
     RecipeAdditionalSerializer,
-    SubscribeListSerializer
+    SubscribeListSerializer,
+    ClientReadSerializer,
+    ClientWriteSerializer,
+    RecipeReadSerializer,
+    RecipeWriteSerializer
 )
+from .filters import RecipeFilter
 
 load_dotenv()
 
@@ -37,12 +38,12 @@ load_dotenv()
 class ClientViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     queryset = Client.objects.all()
-    serializer_class = ClientSerializer
+    serializer_class = ClientReadSerializer
     pagination_class = CustomPageNumberPagination
     http_method_names = ['get', 'post', 'delete', 'put']
 
     def create(self, request):
-        serializer = ClientSerializer(
+        serializer = ClientWriteSerializer(
             data=request.data,
             context={'request': request}
         )
@@ -57,7 +58,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, pk=None):
         queryset = Client.objects.all()
         user = get_object_or_404(queryset, pk=pk)
-        serializer = ClientSerializer(user, context={'request': request})
+        serializer = ClientReadSerializer(user, context={'request': request})
         return Response(serializer.data)
 
     @action(
@@ -134,7 +135,6 @@ class ClientViewSet(viewsets.ModelViewSet):
                 )
 
             Subscribe.objects.create(subscriber=subscriber, author=author)
-            author.is_subscribed = True
             serializer = SubscribeListSerializer(
                 author,
                 context={'request': request}
@@ -153,7 +153,6 @@ class ClientViewSet(viewsets.ModelViewSet):
                     {'error': 'Нельзя удалить несуществующую подписку.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            author.is_subscribed = False
             return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
@@ -164,7 +163,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     )
     def me(self, request):
         user = request.user
-        serializer = ClientSerializer(user, context={'request': request})
+        serializer = ClientReadSerializer(user, context={'request': request})
         return Response(serializer.data)
 
     @action(
@@ -221,36 +220,20 @@ class IngredientViewSet(viewsets.ModelViewSet):
     filterset_fields = ['name']
 
 
-class RecipeFilter(rf_filters.FilterSet):
-    is_in_shopping_cart = rf_filters.BooleanFilter(
-        method='filter_shopping_cart'
-    )
-    is_favorited = rf_filters.BooleanFilter(method='filter_favorited')
-
-    class Meta:
-        model = Recipe
-        fields = ['author', 'ingredients']
-
-    def filter_shopping_cart(self, queryset, name, value):
-        if value and self.request.user.is_authenticated:
-            return queryset.filter(shopping_cart__author=self.request.user)
-        return queryset
-
-    def filter_favorited(self, queryset, name, value):
-        if value and self.request.user.is_authenticated:
-            return queryset.filter(favorite__author=self.request.user)
-        return queryset
-
-
 class RecipeViewSet(viewsets.ModelViewSet):
     permission_classes = [RecipePermission]
     queryset = Recipe.objects.all()
-    serializer_class = RecipeSerializer
+    serializer_class = RecipeReadSerializer
     pagination_class = CustomPageNumberPagination
     filter_backends = (DjangoFilterBackend,)
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']
     filterset_fields = ('author', 'ingredients')
     filterset_class = RecipeFilter
+
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return RecipeWriteSerializer
+        return RecipeReadSerializer
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -260,7 +243,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
             Получаем рецепты, которые находятся
              в корзине текущего пользователя.
         """
-        return super().get_queryset().distinct()
+        return super().get_queryset()
 
     @action(detail=True, methods=['get'], url_path='get-link')
     def get_link(self, request, pk=None):
@@ -277,13 +260,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         """Добавление и удаление рецептов в список покупок."""
 
         author = request.user
-        try:
-            recipe = Recipe.objects.get(pk=pk)
-        except Exception:
-            return Response(
-                {'error': 'Данного рецепта не существует.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        recipe = get_object_or_404(Recipe, pk=pk)
 
         if request.method == 'POST':
             shoppingcart, created = ShoppingCart.objects.get_or_create(
@@ -338,24 +315,21 @@ class RecipeViewSet(viewsets.ModelViewSet):
         if not shopping_cart_items.exists():
             return Response({'message': 'Корзина покупок пуста.'}, status=404)
 
-        media_dir = os.path.join(settings.MEDIA_ROOT, 'shopping_carts')
-        os.makedirs(media_dir, exist_ok=True)
-        file_path = os.path.join(media_dir, 'shopping_cart.txt')
+        shopping_cart_list = [
+            'Список покупок:'
+        ]
 
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write('Список покупок:\n')
-            for item in shopping_cart:
-                f.write(
-                    f'Ингредиент: {item}, количество: '
-                    f'{shopping_cart[item]} {item.measurement_unit}\n'
-                )
+        for key in shopping_cart:
+            shopping_cart_list.append(
+                f'{key}: {shopping_cart[key]} {key.measurement_unit}'
+            )
 
-        response = FileResponse(
-            open(file_path, 'rb'),
+        return FileResponse(
+            ("\n".join(shopping_cart_list)),
             as_attachment=True,
-            filename='shopping_cart.txt'
+            filename="shopping_list.txt",
+            content_type="text/plain; charset=utf-8",
         )
-        return response
 
     @action(
         detail=True,
