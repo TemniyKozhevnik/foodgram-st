@@ -13,7 +13,7 @@ from recipes.models import (
     RecipeIngredient,
     Recipe
 )
-from .constans import MIN_INGREDIENT_AMOUNT
+from .constans import MIN_INGREDIENT_AMOUNT, MIN_RECIPE_COOKING_TIME
 
 
 class ClientReadSerializer(serializers.ModelSerializer):
@@ -256,9 +256,10 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
         return value
 
     def validate_cooking_time(self, value):
-        if value < 1:
+        if value < MIN_RECIPE_COOKING_TIME:
             raise ValidationError(
-                f'Поле cooking_time={value} не может быть меньше 1'
+                f'Поле cooking_time={value} не может быть меньше '
+                f'{MIN_RECIPE_COOKING_TIME}'
             )
         return value
 
